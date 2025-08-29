@@ -1,0 +1,29 @@
+GitPython>=3.1.0
+FastAPI>=0.68.0
+uvicorn[standard]>=0.15.0
+pydantic>=1.8.0
+PyYAML>=6.0
+Jinja2>=3.0.0
+click>=8.0.0
+rich>=10.0.0
+prometheus-client>=0.11.0
+pysmb>=1.2.0
+pathlib>=1.0.1
+cryptography>=3.4.0
+python-multipart>=0.0.5
+aiofiles>=0.7.0
+httpx>=0.24.0
+watchdog>=2.1.0
+
+# Windows-specific dependencies
+pywin32>=227; platform_system=="Windows"
+wmi>=1.5.1; platform_system=="Windows"
+
+# Development dependencies (optional)
+pytest>=6.2.0
+pytest-asyncio>=0.15.0
+pytest-cov>=2.12.0
+black>=21.6.0
+isort>=5.9.0
+flake8>=3.9.0
+mypy>=0.910
