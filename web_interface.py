@@ -556,17 +556,6 @@ async def main_page():
         </div>
         
         <div class="info-box">
-            <h3>💡 Next Steps</h3>
-            <ol>
-                <li>Configure the local developer folder path above</li>
-                <li>Test the path to ensure it's accessible</li>
-                <li>Save the configuration</li>
-                <li>Use the "Start Monitoring" button above to begin watching for changes</li>
-                <li>Files added to the local folder will be automatically synced to GitLab</li>
-            </ol>
-        </div>
-        
-        <div class="info-box">
             <h3>🗂️ Path Mapping</h3>
             <p><strong>htdocs/</strong> → <code>data/htdocs/</code></p>
             <p><strong>script/</strong> → <code>data/script/</code></p>
