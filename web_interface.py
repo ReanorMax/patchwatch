@@ -53,6 +53,10 @@ class ConfigUpdateRequest(BaseModel):
     git_author_email: str = "prostopil@yandex.ru"
 
 
+class AutoModeRequest(BaseModel):
+    enabled: bool
+
+
 def full_scan_folder(base_path: str, force_resync: bool = False) -> Dict[str, Any]:
     """Полное сканирование папки для поиска файлов для синхронизации и удаления"""
     import re
@@ -370,7 +374,9 @@ def load_config() -> Dict[str, Any]:
         'gitlab_token': 'glpat-HgBE57H_YinfANkjP6P4',
         'gitlab_project_id': '92',
         'git_author_name': 'Андрей Комаров',
-        'git_author_email': 'prostopil@yandex.ru'
+        'git_author_email': 'prostopil@yandex.ru',
+        'auto_confirm': True,
+        'auto_sync': True
     }
     
     if config_file.exists():
@@ -475,7 +481,14 @@ async def main_page():
                 <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
             </select>
         </div>
-        
+
+        <div class="form-group">
+            <button id="autoModeBtn"
+                    class="btn {'btn-success' if config['auto_confirm'] and config['auto_sync'] else 'btn-secondary'}"
+                    data-enabled="{str(config['auto_confirm'] and config['auto_sync']).lower()}"
+                    onclick="toggleAutoMode()">🤖 Auto Mode: {'ON' if config['auto_confirm'] and config['auto_sync'] else 'OFF'}</button>
+        </div>
+
         <div class="form-group">
             <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
             <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
@@ -625,7 +638,7 @@ async def main_page():
         async function saveConfig() {{
             const localPath = document.getElementById('localPath').value;
             const pathType = document.getElementById('pathType').value;
-            
+
             try {{
                 const response = await fetch('/save-config', {{
                     method: 'POST',
@@ -635,7 +648,7 @@ async def main_page():
                         path_type: pathType
                     }})
                 }});
-                
+
                 const result = await response.json();
                 showAlert('✅ Configuration saved successfully!', 'success');
                 document.getElementById('currentFolder').textContent = localPath;
@@ -643,7 +656,30 @@ async def main_page():
                 showAlert(`❌ Error saving configuration: ${{error.message}}`, 'error');
             }}
         }}
-        
+
+        async function toggleAutoMode() {{
+            const btn = document.getElementById('autoModeBtn');
+            const enabled = btn.dataset.enabled === 'true';
+            try {{
+                const response = await fetch('/auto-mode', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{enabled: !enabled}})
+                }});
+                const result = await response.json();
+                if (response.ok) {{
+                    btn.dataset.enabled = result.enabled ? 'true' : 'false';
+                    btn.textContent = '🤖 Auto Mode: ' + (result.enabled ? 'ON' : 'OFF');
+                    btn.className = result.enabled ? 'btn btn-success' : 'btn btn-secondary';
+                    showAlert('🤖 Auto mode ' + (result.enabled ? 'enabled' : 'disabled'), 'success');
+                }} else {{
+                    showAlert('❌ Failed to toggle auto mode', 'error');
+                }}
+            }} catch (error) {{
+                showAlert('❌ Error toggling auto mode: ' + error.message, 'error');
+            }}
+        }}
+
         async function saveGitLabConfig() {{
             const gitlabUrl = document.getElementById('gitlabUrl').value;
             const gitlabToken = document.getElementById('gitlabToken').value;
@@ -699,9 +735,18 @@ async def main_page():
         
         async function loadStatus() {{
             try {{
-                const response = await fetch('/monitoring/status');
-                const monitoringData = await response.json();
-                updateMonitoringStatus(monitoringData);
+                const response = await fetch('/status');
+                const data = await response.json();
+                updateMonitoringStatus(data.monitoring);
+                if (data.configuration) {{
+                    const autoEnabled = data.configuration.auto_confirm && data.configuration.auto_sync;
+                    const btn = document.getElementById('autoModeBtn');
+                    if (btn) {{
+                        btn.dataset.enabled = autoEnabled ? 'true' : 'false';
+                        btn.textContent = '🤖 Auto Mode: ' + (autoEnabled ? 'ON' : 'OFF');
+                        btn.className = autoEnabled ? 'btn btn-success' : 'btn btn-secondary';
+                    }}
+                }}
             }} catch (error) {{
                 console.error('Error loading status:', error);
             }}
@@ -952,6 +997,21 @@ async def save_config_endpoint(request: ConfigUpdateRequest):
             return JSONResponse({"message": "Configuration saved successfully"})
         else:
             raise HTTPException(status_code=500, detail="Failed to save configuration")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auto-mode")
+async def set_auto_mode(request: AutoModeRequest):
+    """Enable or disable auto confirm and auto sync"""
+    try:
+        config = load_config()
+        config['auto_confirm'] = request.enabled
+        config['auto_sync'] = request.enabled
+        if save_config(config):
+            return JSONResponse({"enabled": request.enabled})
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save auto mode")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
