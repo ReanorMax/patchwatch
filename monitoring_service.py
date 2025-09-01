@@ -192,8 +192,8 @@ class PatchWatchMonitoringService:
                 self.logger.debug(f"⏭️ Пропускаю временный файл: {file_path}")
                 return
             
-            # Skip already processed files
-            if file_path in self.processed_files:
+            # Skip already processed files except deletions
+            if change_type != "deleted" and file_path in self.processed_files:
                 self.logger.debug(f"⏭️ Файл уже обработан: {file_path}")
                 return
             
