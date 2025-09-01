@@ -50,27 +50,44 @@ class FileChangeHandler(FileSystemEventHandler):
     
     def on_created(self, event):
         """Handle file creation events"""
-        if not event.is_directory:
-            self.logger.info(f"📄 Новый файл создан: {event.src_path}")
-            self.monitoring_service.process_file_change(event.src_path, "created")
+        if event.is_directory:
+            return
+        if self.monitoring_service.should_ignore(event.src_path):
+            return
+        self.logger.info(f"📄 Новый файл создан: {event.src_path}")
+        self.monitoring_service.process_file_change(event.src_path, "created")
     
     def on_modified(self, event):
         """Handle file modification events"""
-        if not event.is_directory:
-            self.logger.info(f"✏️ Файл изменен: {event.src_path}")
-            self.monitoring_service.process_file_change(event.src_path, "modified")
+        if event.is_directory:
+            return
+        if self.monitoring_service.should_ignore(event.src_path):
+            return
+        self.logger.info(f"✏️ Файл изменен: {event.src_path}")
+        self.monitoring_service.process_file_change(event.src_path, "modified")
     
     def on_moved(self, event):
         """Handle file move events"""
-        if not event.is_directory:
-            self.logger.info(f"📁 Файл перемещен: {event.src_path} → {event.dest_path}")
+        if event.is_directory:
+            return
+        ignore_src = self.monitoring_service.should_ignore(event.src_path)
+        ignore_dest = self.monitoring_service.should_ignore(event.dest_path)
+        if ignore_src and ignore_dest:
+            return
+        self.logger.info(f"📁 Файл перемещен: {event.src_path} → {event.dest_path}")
+        if not ignore_src:
+            self.monitoring_service.process_file_change(event.src_path, "deleted")
+        if not ignore_dest:
             self.monitoring_service.process_file_change(event.dest_path, "moved")
     
     def on_deleted(self, event):
         """Handle file deletion events"""
-        if not event.is_directory:
-            self.logger.warning(f"🗑️ Файл удален: {event.src_path}")
-            self.monitoring_service.process_file_change(event.src_path, "deleted")
+        if event.is_directory:
+            return
+        if self.monitoring_service.should_ignore(event.src_path):
+            return
+        self.logger.warning(f"🗑️ Файл удален: {event.src_path}")
+        self.monitoring_service.process_file_change(event.src_path, "deleted")
 
 
 class PatchWatchMonitoringService:
@@ -181,16 +198,26 @@ class PatchWatchMonitoringService:
         except Exception as e:
             self.logger.error(f"❌ Ошибка остановки мониторинга: {e}")
             return False
-    
+
+    def should_ignore(self, file_path: str) -> bool:
+        """Check if a file path should be ignored based on default masks"""
+        path_obj = Path(file_path)
+        if path_obj.name.startswith('.'):
+            return True
+        if any(part in {'.git', '__pycache__', 'node_modules'} for part in path_obj.parts):
+            return True
+        if path_obj.suffix.lower() in {'.tmp', '.temp'}:
+            return True
+        return False
+
     def process_file_change(self, file_path: str, change_type: str):
         """Process detected file changes"""
         try:
-            file_path_obj = Path(file_path)
-            
-            # Skip temporary files
-            if file_path_obj.name.startswith('.') or file_path_obj.suffix in ['.tmp', '.temp']:
-                self.logger.debug(f"⏭️ Пропускаю временный файл: {file_path}")
+            if self.should_ignore(file_path):
+                self.logger.debug(f"⏭️ Пропускаю файл по маске: {file_path}")
                 return
+
+            file_path_obj = Path(file_path)
             
             # Skip already processed files except deletions
             if change_type != "deleted" and file_path in self.processed_files:
