@@ -413,9 +413,9 @@ monitoring_service_instance = None
 app = FastAPI(title="PatchWatch Configuration", version="1.0.0")
 
 
-@app.get("/", response_class=HTMLResponse)
-async def main_page():
-    """Main configuration page"""
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page():
+    """Configuration page with advanced settings"""
     config = load_config()
 
     # Prepare existing path mappings for HTML with labels
@@ -482,6 +482,9 @@ async def main_page():
 </head>
 <body>
     <div class="container">
+        <nav style="margin-bottom:20px;">
+            <a href="/">🏠 Monitoring</a>
+        </nav>
         <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:inline-block; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
         <div class="info-box" id="systemInfo" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -968,6 +971,129 @@ async def main_page():
 </body>
 </html>'''
     
+    return HTMLResponse(content=html)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def main_page():
+    """Minimal monitoring page"""
+    html = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PatchWatch Monitoring</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .btn { padding: 12px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; opacity: 0.6; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .status-ok { background: #d4edda; color: #155724; }
+        .status-indicator { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .status-running { background: #d4edda; color: #155724; }
+        .status-stopped { background: #f8d7da; color: #721c24; }
+        .alert { padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav style="margin-bottom:20px;">
+            <a href="/settings">⚙️ Settings</a>
+        </nav>
+        <div id="alertArea"></div>
+        <div class="monitoring-controls">
+            <h3>🔄 Monitoring Controls</h3>
+            <p>Start or stop monitoring the configured local developer folder:</p>
+            <div id="monitoringStatus" class="status">Status: <span id="monitoringStatusText">Loading...</span></div>
+            <div class="form-group">
+                <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ Start Monitoring</button>
+                <button id="stopBtn" class="btn btn-secondary" onclick="stopMonitoring()">⏹️ Stop Monitoring</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function showAlert(message, type = 'info') {
+            const alertArea = document.getElementById('alertArea');
+            const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
+            alertArea.innerHTML = `<div class="alert ${alertClass}" style="display:block;">${message}</div>`;
+            setTimeout(() => { alertArea.innerHTML = ''; }, 5000);
+        }
+
+        async function loadStatus() {
+            try {
+                const response = await fetch('/monitoring/status');
+                const data = await response.json();
+                updateMonitoringStatus(data);
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+
+        async function startMonitoring() {
+            try {
+                const response = await fetch('/monitoring', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'start'})
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showAlert('✅ Monitoring started successfully!', 'success');
+                    loadStatus();
+                } else {
+                    showAlert(`❌ Failed to start monitoring: ${result.detail}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`❌ Error starting monitoring: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopMonitoring() {
+            try {
+                const response = await fetch('/monitoring', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'stop'})
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showAlert('✅ Monitoring stopped successfully!', 'success');
+                    loadStatus();
+                } else {
+                    showAlert(`❌ Failed to stop monitoring: ${result.detail}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`❌ Error stopping monitoring: ${error.message}`, 'error');
+            }
+        }
+
+        function updateMonitoringStatus(data) {
+            const statusText = document.getElementById('monitoringStatusText');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const monitoringStatus = document.getElementById('monitoringStatus');
+            if (data.active) {
+                statusText.innerHTML = '<span class="status-indicator status-running">Running</span>';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                monitoringStatus.className = 'status status-ok';
+            } else {
+                statusText.innerHTML = '<span class="status-indicator status-stopped">Stopped</span>';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                monitoringStatus.className = 'status status-stopped';
+            }
+        }
+
+        window.onload = loadStatus;
+    </script>
+</body>
+</html>'''
+
     return HTMLResponse(content=html)
 
 
