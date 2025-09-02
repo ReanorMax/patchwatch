@@ -41,7 +41,7 @@ class MonitoringConfig:
     gitlab_url: str = "http://10.19.1.20/Automatization/patchwatch"
     gitlab_token: str = "glpat-HgBE57H_YinfANkjP6P4"
     gitlab_project_id: str = "92"
-    git_author_name: str = "Андрей Комаров"
+    git_author_name: str = "SyncBot 🛰️"
     git_author_email: str = "prostopil@yandex.ru"
     log_level: str = "INFO"
     auto_confirm: bool = True
@@ -781,7 +781,7 @@ def load_monitoring_config() -> MonitoringConfig:
                     gitlab_url=data.get('gitlab_url', 'http://10.19.1.20/Automatization/patchwatch'),
                     gitlab_token=data.get('gitlab_token', 'glpat-iU4i1onU2dQY4k-UryFT'),
                     gitlab_project_id=data.get('gitlab_project_id', '92'),
-                    git_author_name=data.get('git_author_name', 'Андрей Комаров'),
+                    git_author_name=data.get('git_author_name', 'SyncBot 🛰️'),
                     git_author_email=data.get('git_author_email', 'prostopil@yandex.ru'),
                     auto_confirm=data.get('auto_confirm', True),
                     auto_sync=data.get('auto_sync', True),
