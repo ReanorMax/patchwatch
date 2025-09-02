@@ -478,142 +478,162 @@ async def main_page():
         .mapping-label {{ font-weight: bold; font-size: 12px; }}
         .mapping-arrow {{ font-weight: bold; }}
         .btn-sm {{ padding: 4px 8px; font-size: 12px; }}
+        .tab-buttons {{ display: flex; margin-bottom: 20px; }}
+        .tab-btn {{ flex: 1; padding: 10px; cursor: pointer; border: none; background: #6c757d; color: white; }}
+        .tab-btn.active {{ background: #667eea; }}
+        .tab-content {{ display: none; }}
+        .tab-content.active {{ display: block; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:inline-block; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
-        <div class="info-box" id="systemInfo" style="display:none;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3 style="margin:0;">📋 System Information</h3>
-                <button class="btn btn-secondary btn-sm" onclick="toggleSystemInfo()">❌ Hide</button>
-            </div>
-            <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
-            <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
-            <p><strong>Current Local Folder:</strong> <span id="currentFolder">{config['local_developer_folder']}</span></p>
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="showTab('monitorTab', this)">🖥️ Monitor</button>
+            <button class="tab-btn" onclick="showTab('settingsTab', this)">⚙️ Settings</button>
         </div>
 
-        <div id="statusArea"></div>
         <div id="alertArea"></div>
-        
-        <button type="button" class="collapsible">📁 Local Developer Folder Path</button>
-        <div class="content">
-            <div class="info-box">
+
+        <div id="monitorTab" class="tab-content active">
+            <div class="monitoring-controls">
+                <h3>🔄 Monitoring Controls</h3>
+                <p>Start or stop monitoring the configured local developer folder:</p>
+                <div id="monitoringStatus" class="status">Status: <span id="monitoringStatusText">Loading...</span></div>
+                <div id="monitoringStats" class="info-box" style="display: none;">
+                    <p><strong>📊 Processed Files:</strong> <span id="processedCount">0</span></p>
+                    <p><strong>📁 Monitored Folder:</strong> <span id="monitoredFolder">-</span></p>
+                </div>
                 <div class="form-group">
-                    <label for="localPath">Local Developer Folder Path:</label>
-                    <input type="text" id="localPath" value="{config['local_developer_folder']}"
-                           placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
-                    <small>Path where developers drop new files (can be local or network path)</small>
+                    <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ Start Monitoring</button>
+                    <button id="stopBtn" class="btn btn-secondary" onclick="stopMonitoring()">⏹️ Stop Monitoring</button>
+                    <button class="btn btn-success" onclick="fullScan()">🔍 Сканировать папку</button>
+                    <button class="btn btn-secondary" onclick="showLogs()">📄 View Logs</button>
+                </div>
+                <small><strong>Note:</strong> Monitoring will watch for changes in the local folder and sync them to GitLab automatically.</small>
+            </div>
+
+            <div id="logsSection" class="info-box" style="display: none;">
+                <h3>📄 Recent Logs</h3>
+                <div id="logsContent" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">
+                    Loading logs...
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-secondary" onclick="refreshLogs()">🔄 Refresh Logs</button>
+                    <button class="btn btn-secondary" onclick="hideLogs()">❌ Hide Logs</button>
                 </div>
             </div>
         </div>
 
-        <button type="button" class="collapsible">🛣️ Path Type</button>
-        <div class="content">
-            <div class="info-box">
-                <div class="form-group">
-                    <label for="pathType">Path Type:</label>
-                    <select id="pathType">
-                        <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
-                        <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
-                        <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
-                    </select>
+        <div id="settingsTab" class="tab-content">
+            <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:inline-block; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
+            <div class="info-box" id="systemInfo" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0;">📋 System Information</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleSystemInfo()">❌ Hide</button>
+                </div>
+                <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
+                <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
+                <p><strong>Current Local Folder:</strong> <span id="currentFolder">{config['local_developer_folder']}</span></p>
+            </div>
+
+            <button type="button" class="collapsible">📁 Local Developer Folder Path</button>
+            <div class="content">
+                <div class="info-box">
+                    <div class="form-group">
+                        <label for="localPath">Local Developer Folder Path:</label>
+                        <input type="text" id="localPath" value="{config['local_developer_folder']}"
+                               placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
+                        <small>Path where developers drop new files (can be local or network path)</small>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="form-group">
-            <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
-            <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
-            <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
-        </div>
-        
-        <button type="button" class="collapsible">🌐 GitLab Repository Configuration</button>
-        <div class="content">
-            <div class="info-box">
-                <p>Configure the target GitLab repository for synchronization:</p>
-                
-                <div class="form-group">
-                    <label for="gitlabUrl">GitLab Repository URL:</label>
-                    <input type="text" id="gitlabUrl" value="{config['gitlab_url']}" 
-                           placeholder="http://your-gitlab.com/group/project">
-                    <small>GitLab repository URL (without /-/tree/main/data suffix)</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="gitlabToken">GitLab Access Token:</label>
-                    <input type="password" id="gitlabToken" value="{config['gitlab_token']}" 
-                           placeholder="glpat-xxxxxxxxxxxxx">
-                    <small>Personal Access Token with Maintainer permissions (glpat-*)</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="gitlabProjectId">GitLab Project ID:</label>
-                    <input type="text" id="gitlabProjectId" value="{config['gitlab_project_id']}" 
-                           placeholder="92">
-                    <small>Numeric project ID from GitLab</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="gitAuthorName">Git Author Name:</label>
-                    <input type="text" id="gitAuthorName" value="{config['git_author_name']}" 
-                           placeholder="Андрей Комаров">
-                </div>
-                
-                <div class="form-group">
-                    <label for="gitAuthorEmail">Git Author Email:</label>
-                    <input type="email" id="gitAuthorEmail" value="{config['git_author_email']}" 
-                           placeholder="prostopil@yandex.ru">
-                </div>
-                
-                <div class="form-group">
-                    <button class="btn btn-success" onclick="saveGitLabConfig()">💾 Save GitLab Config</button>
-                    <button class="btn btn-secondary" onclick="testGitLabConnection()">🔗 Test Connection</button>
+
+            <button type="button" class="collapsible">🛣️ Path Type</button>
+            <div class="content">
+                <div class="info-box">
+                    <div class="form-group">
+                        <label for="pathType">Path Type:</label>
+                        <select id="pathType">
+                            <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
+                            <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
+                            <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="monitoring-controls">
-            <h3>🔄 Monitoring Controls</h3>
-            <p>Start or stop monitoring the configured local developer folder:</p>
-            <div id="monitoringStatus" class="status">Status: <span id="monitoringStatusText">Loading...</span></div>
-            <div id="monitoringStats" class="info-box" style="display: none;">
-                <p><strong>📊 Processed Files:</strong> <span id="processedCount">0</span></p>
-                <p><strong>📁 Monitored Folder:</strong> <span id="monitoredFolder">-</span></p>
-            </div>
+
             <div class="form-group">
-                <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ Start Monitoring</button>
-                <button id="stopBtn" class="btn btn-secondary" onclick="stopMonitoring()">⏹️ Stop Monitoring</button>
-                <button class="btn btn-success" onclick="fullScan()">🔍 Сканировать папку</button>
-                <button class="btn btn-secondary" onclick="showLogs()">📄 View Logs</button>
+                <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
+                <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
+                <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
             </div>
-            <small><strong>Note:</strong> Monitoring will watch for changes in the local folder and sync them to GitLab automatically.</small>
-        </div>
-        
-        <div id="logsSection" class="info-box" style="display: none;">
-            <h3>📄 Recent Logs</h3>
-            <div id="logsContent" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">
-                Loading logs...
+
+            <button type="button" class="collapsible">🌐 GitLab Repository Configuration</button>
+            <div class="content">
+                <div class="info-box">
+                    <p>Configure the target GitLab repository for synchronization:</p>
+
+                    <div class="form-group">
+                        <label for="gitlabUrl">GitLab Repository URL:</label>
+                        <input type="text" id="gitlabUrl" value="{config['gitlab_url']}"
+                               placeholder="http://your-gitlab.com/group/project">
+                        <small>GitLab repository URL (without /-/tree/main/data suffix)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gitlabToken">GitLab Access Token:</label>
+                        <input type="password" id="gitlabToken" value="{config['gitlab_token']}"
+                               placeholder="glpat-xxxxxxxxxxxxx">
+                        <small>Personal Access Token with Maintainer permissions (glpat-*)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gitlabProjectId">GitLab Project ID:</label>
+                        <input type="text" id="gitlabProjectId" value="{config['gitlab_project_id']}"
+                               placeholder="92">
+                        <small>Numeric project ID from GitLab</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gitAuthorName">Git Author Name:</label>
+                        <input type="text" id="gitAuthorName" value="{config['git_author_name']}"
+                               placeholder="Андрей Комаров">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gitAuthorEmail">Git Author Email:</label>
+                        <input type="email" id="gitAuthorEmail" value="{config['git_author_email']}"
+                               placeholder="prostopil@yandex.ru">
+                    </div>
+
+                    <div class="form-group">
+                        <button class="btn btn-success" onclick="saveGitLabConfig()">💾 Save GitLab Config</button>
+                        <button class="btn btn-secondary" onclick="testGitLabConnection()">🔗 Test Connection</button>
+                    </div>
+                </div>
             </div>
-            <div style="margin-top: 10px;">
-                <button class="btn btn-secondary" onclick="refreshLogs()">🔄 Refresh Logs</button>
-                <button class="btn btn-secondary" onclick="hideLogs()">❌ Hide Logs</button>
-            </div>
-        </div>
-      
-        <button type="button" class="collapsible">🗂️ Path Mapping</button>
-        <div class="content">
-            <div class="info-box">
-                <div id="pathMappingsContainer">{path_mappings_html}</div>
-                <div class="form-group" style="margin-top:10px;">
-                    <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
-                    <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
+
+            <button type="button" class="collapsible">🗂️ Path Mapping</button>
+            <div class="content">
+                <div class="info-box">
+                    <div id="pathMappingsContainer">{path_mappings_html}</div>
+                    <div class="form-group" style="margin-top:10px;">
+                        <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
+                        <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
     <script>
+        function showTab(tabId, btn) {{
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }}
+
         // Collapsible functionality for GitLab configuration
         document.addEventListener('DOMContentLoaded', function() {{
             var coll = document.getElementsByClassName("collapsible");
