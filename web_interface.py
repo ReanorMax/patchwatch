@@ -482,8 +482,8 @@ async def main_page():
 </head>
 <body>
     <div class="container">
-        <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:none; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
-        <div class="info-box" id="systemInfo">
+        <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:inline-block; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
+        <div class="info-box" id="systemInfo" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0;">📋 System Information</h3>
                 <button class="btn btn-secondary btn-sm" onclick="toggleSystemInfo()">❌ Hide</button>
@@ -496,20 +496,30 @@ async def main_page():
         <div id="statusArea"></div>
         <div id="alertArea"></div>
         
-        <div class="form-group">
-            <label for="localPath">Local Developer Folder Path:</label>
-            <input type="text" id="localPath" value="{config['local_developer_folder']}" 
-                   placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
-            <small>Path where developers drop new files (can be local or network path)</small>
+        <button type="button" class="collapsible">📁 Local Developer Folder Path</button>
+        <div class="content">
+            <div class="info-box">
+                <div class="form-group">
+                    <label for="localPath">Local Developer Folder Path:</label>
+                    <input type="text" id="localPath" value="{config['local_developer_folder']}"
+                           placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
+                    <small>Path where developers drop new files (can be local or network path)</small>
+                </div>
+            </div>
         </div>
-        
-        <div class="form-group">
-            <label for="pathType">Path Type:</label>
-            <select id="pathType">
-                <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
-                <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
-                <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
-            </select>
+
+        <button type="button" class="collapsible">🛣️ Path Type</button>
+        <div class="content">
+            <div class="info-box">
+                <div class="form-group">
+                    <label for="pathType">Path Type:</label>
+                    <select id="pathType">
+                        <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
+                        <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
+                        <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
+                    </select>
+                </div>
+            </div>
         </div>
         
         <div class="form-group">
