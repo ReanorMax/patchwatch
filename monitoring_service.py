@@ -421,7 +421,11 @@ class PatchWatchMonitoringService:
             response = requests.get(api_url, headers=headers)
             
             if response.status_code == 200:
-                user_info = response.json()
+                try:
+                    user_info = response.json()
+                except json.JSONDecodeError:
+                    self.logger.error(f"❌ Неверный ответ от GitLab при проверке токена: {response.text[:100]}")
+                    return False
                 self.logger.info(f"👤 Пользователь: {user_info.get('name')} ({user_info.get('username')})")
                 self.logger.info(f"🔑 Уровень доступа: {user_info.get('access_level', 'Unknown')}")
                 return True
@@ -444,7 +448,11 @@ class PatchWatchMonitoringService:
             response = requests.get(api_url, headers=headers, params=params)
             
             if response.status_code == 200:
-                projects = response.json()
+                try:
+                    projects = response.json()
+                except json.JSONDecodeError:
+                    self.logger.error(f"❌ Неверный JSON от GitLab при поиске проектов: {response.text[:100]}")
+                    return None
                 self.logger.info(f"🔍 Найдено проектов: {len(projects)}")
                 
                 for project in projects:
@@ -505,7 +513,11 @@ class PatchWatchMonitoringService:
             project_response = requests.get(project_api_url, headers=headers)
             
             if project_response.status_code == 200:
-                project_info = project_response.json()
+                try:
+                    project_info = project_response.json()
+                except json.JSONDecodeError:
+                    self.logger.error(f"❌ Неверный JSON при получении данных проекта: {project_response.text[:100]}")
+                    return False
                 permissions = project_info.get('permissions', {})
                 project_access = permissions.get('project_access') or {}
                 group_access = permissions.get('group_access') or {}

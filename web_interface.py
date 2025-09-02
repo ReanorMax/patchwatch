@@ -1080,7 +1080,14 @@ async def test_gitlab_connection(request: dict):
         response = requests.get(api_url, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            user_info = response.json()
+            try:
+                user_info = response.json()
+            except ValueError:
+                return JSONResponse({
+                    "success": False,
+                    "error": "Invalid JSON response from GitLab",
+                    "details": response.text[:100]
+                })
             return JSONResponse({
                 "success": True,
                 "user_name": user_info.get('name', 'Unknown'),
