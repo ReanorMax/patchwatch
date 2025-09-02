@@ -253,7 +253,7 @@ def start_monitoring(config_path: str) -> bool:
                 gitlab_url=config_data.get('gitlab_url', 'http://10.19.1.20/Automatization/patchwatch'),
                 gitlab_token=config_data.get('gitlab_token', 'glpat-HgBE57H_YinfANkjP6P4'),
                 gitlab_project_id=config_data.get('gitlab_project_id', '92'),
-                git_author_name=config_data.get('git_author_name', 'SyncBot 🛰️'),
+                git_author_name=config_data.get('git_author_name', 'Андрей Комаров'),
                 git_author_email=config_data.get('git_author_email', 'prostopil@yandex.ru'),
                 path_mappings=config_data.get('path_mappings', DEFAULT_PATH_MAPPINGS.copy())
             )
@@ -376,7 +376,7 @@ def load_config() -> Dict[str, Any]:
         'gitlab_url': 'http://10.19.1.20/Automatization/patchwatch',
         'gitlab_token': 'glpat-HgBE57H_YinfANkjP6P4',
         'gitlab_project_id': '92',
-        'git_author_name': 'SyncBot 🛰️',
+        'git_author_name': 'Андрей Комаров',
         'git_author_email': 'prostopil@yandex.ru',
         'path_mappings': DEFAULT_PATH_MAPPINGS.copy()
     }
@@ -588,7 +588,7 @@ async def main_page():
                     <div class="form-group">
                         <label for="gitAuthorName">Git Author Name:</label>
                         <input type="text" id="gitAuthorName" value="{config['git_author_name']}"
-                               placeholder="SyncBot 🛰️">
+                               placeholder="Андрей Комаров">
                     </div>
 
                     <div class="form-group">
