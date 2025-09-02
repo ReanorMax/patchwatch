@@ -8,9 +8,10 @@ import json
 import time
 import subprocess
 import threading
+import asyncio
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Set
 from datetime import datetime
 
 # Import monitoring service
@@ -26,7 +27,7 @@ except ImportError:
     PatchWatchMonitoringService = None
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
     from fastapi.responses import HTMLResponse, JSONResponse
     from pydantic import BaseModel
     import uvicorn
@@ -412,6 +413,86 @@ monitoring_service_instance = None
 # Create FastAPI app
 app = FastAPI(title="PatchWatch Configuration", version="1.0.0")
 
+# WebSocket log streaming state
+log_clients: Set[WebSocket] = set()
+log_loop: Optional[asyncio.AbstractEventLoop] = None
+log_thread_started = False
+
+
+def get_latest_log_file() -> Optional[Path]:
+    """Return the most recent patchwatch log file."""
+    logs_dir = Path(__file__).parent / "logs"
+    log_files = sorted(
+        logs_dir.glob("patchwatch_*.log"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
+    return log_files[0] if log_files else None
+
+
+def read_recent_logs(max_lines: int = 50) -> List[str]:
+    """Read last lines from the most recent log file."""
+    log_file = get_latest_log_file()
+    if not log_file or not log_file.exists():
+        return ["❌ No log files found"]
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+            return [line.strip() for line in lines[-max_lines:]]
+    except Exception as e:
+        return [f"❌ Error reading log file: {e}"]
+
+
+async def broadcast_log_line(line: str) -> None:
+    """Send a log line to all connected WebSocket clients."""
+    stale: List[WebSocket] = []
+    for ws in list(log_clients):
+        try:
+            await ws.send_text(line)
+        except Exception:
+            stale.append(ws)
+    for ws in stale:
+        log_clients.discard(ws)
+
+
+def log_watcher() -> None:
+    """Background thread that tails the current log file and broadcasts new lines."""
+    last_file: Optional[Path] = None
+    file_obj = None
+    while True:
+        try:
+            current_file = get_latest_log_file()
+            if current_file is None:
+                time.sleep(1)
+                continue
+            if current_file != last_file:
+                if file_obj:
+                    file_obj.close()
+                file_obj = open(current_file, "r", encoding="utf-8", errors="ignore")
+                file_obj.seek(0, 2)  # Move to end of file
+                last_file = current_file
+
+            line = file_obj.readline()
+            if not line:
+                time.sleep(1)
+                continue
+            if log_loop:
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_log_line(line.rstrip()), log_loop
+                )
+        except Exception:
+            time.sleep(1)
+
+
+@app.on_event("startup")
+async def start_log_thread() -> None:
+    """Initialize background log watcher thread."""
+    global log_loop, log_thread_started
+    if not log_thread_started:
+        log_loop = asyncio.get_running_loop()
+        threading.Thread(target=log_watcher, daemon=True).start()
+        log_thread_started = True
+
 
 @app.get("/", response_class=HTMLResponse)
 async def main_page():
@@ -518,7 +599,6 @@ async def main_page():
                     Loading logs...
                 </div>
                 <div style="margin-top: 10px;">
-                    <button class="btn btn-secondary" onclick="refreshLogs()">🔄 Refresh Logs</button>
                     <button class="btn btn-secondary" onclick="hideLogs()">❌ Hide Logs</button>
                 </div>
             </div>
@@ -618,6 +698,8 @@ async def main_page():
     </div>
     
     <script>
+        let logsSocket = null;
+
         function showTab(tabId, btn) {{
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
@@ -886,10 +968,6 @@ async def main_page():
                     
                     showAlert(message, 'success');
                     
-                    // Обновляем логи чтобы показать результаты сканирования
-                    if (document.getElementById('logsSection').style.display !== 'none') {{
-                        refreshLogs();
-                    }}
                 }} else {{
                     showAlert(`❌ Ошибка сканирования: ${{result.error}}`, 'error');
                 }}
@@ -930,33 +1008,37 @@ async def main_page():
             }}
         }}
         
-        async function showLogs() {{
+        function showLogs() {{
             const logsSection = document.getElementById('logsSection');
             logsSection.style.display = 'block';
-            await refreshLogs();
+            connectLogsSocket();
         }}
-        
+
         function hideLogs() {{
             document.getElementById('logsSection').style.display = 'none';
-        }}
-        
-        async function refreshLogs() {{
-            try {{
-                const response = await fetch('/logs');
-                const data = await response.json();
-                
-                const logsContent = document.getElementById('logsContent');
-                if (data.logs && data.logs.length > 0) {{
-                    logsContent.innerHTML = data.logs.map(log => `<div>${{log}}</div>`).join('');
-                }} else {{
-                    logsContent.innerHTML = 'No logs available or logs file not found.';
-                }}
-                
-                // Auto-scroll to bottom
-                logsContent.scrollTop = logsContent.scrollHeight;
-            }} catch (error) {{
-                document.getElementById('logsContent').innerHTML = `Error loading logs: ${{error.message}}`;
+            if (logsSocket) {{
+                logsSocket.close();
+                logsSocket = null;
             }}
+        }}
+
+        function connectLogsSocket() {{
+            if (logsSocket) {{
+                logsSocket.close();
+            }}
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            logsSocket = new WebSocket(`${{protocol}}://${{window.location.host}}/ws/logs`);
+            const logsContent = document.getElementById('logsContent');
+            logsContent.innerHTML = '';
+            logsSocket.onmessage = (event) => {{
+                const div = document.createElement('div');
+                div.textContent = event.data;
+                logsContent.appendChild(div);
+                logsContent.scrollTop = logsContent.scrollHeight;
+            }};
+            logsSocket.onclose = () => {{
+                logsSocket = null;
+            }};
         }}
         
         // Load status on page load
@@ -1129,6 +1211,23 @@ async def get_monitoring_status_endpoint():
     """Get monitoring status"""
     status = get_monitoring_status()
     return JSONResponse(status)
+
+
+@app.websocket("/ws/logs")
+async def websocket_logs(websocket: WebSocket) -> None:
+    """WebSocket endpoint streaming log updates to clients."""
+    await websocket.accept()
+    log_clients.add(websocket)
+
+    # Send recent log lines on connection
+    for line in read_recent_logs():
+        await websocket.send_text(line)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        log_clients.discard(websocket)
 
 
 @app.get("/logs")
