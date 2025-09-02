@@ -552,12 +552,11 @@ async def main_page():
                         </select>
                     </div>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
-                <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
-                <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
+                <div class="form-group">
+                    <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
+                    <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
+                    <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
+                </div>
             </div>
 
             <button type="button" class="collapsible">🌐 GitLab Repository Configuration</button>
