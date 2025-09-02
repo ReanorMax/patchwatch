@@ -451,7 +451,6 @@ async def main_page():
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
         .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }}
         .form-group {{ margin-bottom: 20px; }}
         label {{ display: block; margin-bottom: 5px; font-weight: bold; color: #333; }}
         input, select {{ width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; }}
@@ -483,18 +482,17 @@ async def main_page():
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🎯 PatchWatch Configuration</h1>
-            <p>Configure local developer folder for GitLab synchronization</p>
-        </div>
-        
-        <div class="info-box">
-            <h3>📋 System Information</h3>
+        <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:none; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
+        <div class="info-box" id="systemInfo">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">📋 System Information</h3>
+                <button class="btn btn-secondary btn-sm" onclick="toggleSystemInfo()">❌ Hide</button>
+            </div>
             <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
             <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
             <p><strong>Current Local Folder:</strong> <span id="currentFolder">{config['local_developer_folder']}</span></p>
         </div>
-        
+
         <div id="statusArea"></div>
         <div id="alertArea"></div>
         
@@ -631,6 +629,18 @@ async def main_page():
             setTimeout(() => {{
                 alertArea.innerHTML = '';
             }}, 5000);
+        }}
+
+        function toggleSystemInfo() {{
+            const info = document.getElementById('systemInfo');
+            const showBtn = document.getElementById('showSystemInfoBtn');
+            if (info.style.display === 'none') {{
+                info.style.display = 'block';
+                showBtn.style.display = 'none';
+            }} else {{
+                info.style.display = 'none';
+                showBtn.style.display = 'inline-block';
+            }}
         }}
 
         function addMapping() {{
