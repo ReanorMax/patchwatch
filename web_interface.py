@@ -418,21 +418,27 @@ async def main_page():
     """Main configuration page"""
     config = load_config()
 
-    # Prepare existing path mappings for HTML
+    # Prepare existing path mappings for HTML with labels
     path_mappings_html = ""
     for mapping in config.get('path_mappings', []):
         path_mappings_html += (
             f'<div class="mapping-row">'
-            f'<input type="text" class="mapping-source" value="{mapping["source"]}"> → '
-            f'<input type="text" class="mapping-target" value="{mapping["target"]}"> '
+            f'<span class="mapping-label">Local</span>'
+            f'<input type="text" class="mapping-source" value="{mapping["source"]}" placeholder="local path">'
+            f'<span class="mapping-arrow">→</span>'
+            f'<span class="mapping-label">Git</span>'
+            f'<input type="text" class="mapping-target" value="{mapping["target"]}" placeholder="git path"> '
             f'<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
             f'</div>'
         )
     if not path_mappings_html:
         path_mappings_html = (
             '<div class="mapping-row">'
-            '<input type="text" class="mapping-source" placeholder="source path"> → '
-            '<input type="text" class="mapping-target" placeholder="target path"> '
+            '<span class="mapping-label">Local</span>'
+            '<input type="text" class="mapping-source" placeholder="local path">'
+            '<span class="mapping-arrow">→</span>'
+            '<span class="mapping-label">Git</span>'
+            '<input type="text" class="mapping-target" placeholder="git path"> '
             '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
             '</div>'
         )
@@ -470,6 +476,8 @@ async def main_page():
         .content {{ padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #f9f9f9; }}
         .mapping-row {{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }}
         .mapping-row input {{ flex: 1; }}
+        .mapping-label {{ font-weight: bold; font-size: 12px; }}
+        .mapping-arrow {{ font-weight: bold; }}
         .btn-sm {{ padding: 4px 8px; font-size: 12px; }}
     </style>
 </head>
@@ -585,12 +593,14 @@ async def main_page():
             </div>
         </div>
       
-        <div class="info-box">
-            <h3>🗂️ Path Mapping</h3>
-            <div id="pathMappingsContainer">{path_mappings_html}</div>
-            <div class="form-group" style="margin-top:10px;">
-                <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
-                <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
+        <button type="button" class="collapsible">🗂️ Path Mapping</button>
+        <div class="content">
+            <div class="info-box">
+                <div id="pathMappingsContainer">{path_mappings_html}</div>
+                <div class="form-group" style="margin-top:10px;">
+                    <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
+                    <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
+                </div>
             </div>
         </div>
     </div>
@@ -627,8 +637,11 @@ async def main_page():
             const container = document.getElementById('pathMappingsContainer');
             const div = document.createElement('div');
             div.className = 'mapping-row';
-            div.innerHTML = '<input type="text" class="mapping-source" placeholder="source path"> → ' +
-                '<input type="text" class="mapping-target" placeholder="target path"> ' +
+            div.innerHTML = '<span class="mapping-label">Local</span>' +
+                '<input type="text" class="mapping-source" placeholder="local path">' +
+                '<span class="mapping-arrow">→</span>' +
+                '<span class="mapping-label">Git</span>' +
+                '<input type="text" class="mapping-target" placeholder="git path"> ' +
                 '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>';
             container.appendChild(div);
         }}
@@ -649,12 +662,18 @@ async def main_page():
             }});
 
             try {{
-                await fetch('/save-config', {{
+                const response = await fetch('/save-config', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{ path_mappings: mappings }})
                 }});
-                showAlert('✅ Path mappings saved successfully!', 'success');
+                const result = await response.json();
+                if (response.ok) {{
+                    const applied = mappings.map(m => `${{m.source}} → ${{m.target}}`).join('<br>');
+                    showAlert(`✅ Path mappings saved:<br>${{applied}}`, 'success');
+                }} else {{
+                    showAlert(`❌ Error saving path mappings: ${{result.detail || result.message}}`, 'error');
+                }}
             }} catch (error) {{
                 showAlert(`❌ Error saving path mappings: ${{error.message}}`, 'error');
             }}
