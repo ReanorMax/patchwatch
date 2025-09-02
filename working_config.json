@@ -8,5 +8,12 @@
   "git_author_email": "prostopil@yandex.ru",
   "auto_confirm": true,
   "auto_sync": true,
-  "auto_delete": true
+  "auto_delete": true,
+  "path_mappings": [
+    {"source": "usr/local/httpd/htdocs", "target": "htdocs"},
+    {"source": "usr/local/asterisk/etc/asterisk/script", "target": "script"},
+    {"source": "home/storage/local", "target": "home/storage/local"},
+    {"source": "htdocs", "target": "htdocs"},
+    {"source": "script", "target": "script"}
+  ]
 }
