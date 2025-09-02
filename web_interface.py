@@ -525,11 +525,9 @@ async def main_page():
         </div>
 
         <div id="settingsTab" class="tab-content">
-            <button id="showSystemInfoBtn" class="btn btn-secondary btn-sm" style="display:inline-block; margin-bottom:10px;" onclick="toggleSystemInfo()">📋 Show System Info</button>
-            <div class="info-box" id="systemInfo" style="display:none;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="info-box" id="systemInfo">
+                <div style="display:flex; align-items:center;">
                     <h3 style="margin:0;">📋 System Information</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="toggleSystemInfo()">❌ Hide</button>
                 </div>
                 <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
                 <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
@@ -545,12 +543,6 @@ async def main_page():
                                placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
                         <small>Path where developers drop new files (can be local or network path)</small>
                     </div>
-                </div>
-            </div>
-
-            <button type="button" class="collapsible">🛣️ Path Type</button>
-            <div class="content">
-                <div class="info-box">
                     <div class="form-group">
                         <label for="pathType">Path Type:</label>
                         <select id="pathType">
@@ -659,18 +651,6 @@ async def main_page():
             setTimeout(() => {{
                 alertArea.innerHTML = '';
             }}, 5000);
-        }}
-
-        function toggleSystemInfo() {{
-            const info = document.getElementById('systemInfo');
-            const showBtn = document.getElementById('showSystemInfoBtn');
-            if (info.style.display === 'none') {{
-                info.style.display = 'block';
-                showBtn.style.display = 'none';
-            }} else {{
-                info.style.display = 'none';
-                showBtn.style.display = 'inline-block';
-            }}
         }}
 
         function addMapping() {{
