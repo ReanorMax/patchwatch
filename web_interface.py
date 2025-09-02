@@ -10,12 +10,17 @@ import subprocess
 import threading
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 # Import monitoring service
 try:
-    from monitoring_service import PatchWatchMonitoringService, MonitoringConfig, load_monitoring_config
+    from monitoring_service import (
+        PatchWatchMonitoringService,
+        MonitoringConfig,
+        load_monitoring_config,
+        DEFAULT_PATH_MAPPINGS,
+    )
 except ImportError:
     print("Warning: monitoring_service not available")
     PatchWatchMonitoringService = None
@@ -44,13 +49,14 @@ class FullScanRequest(BaseModel):
 
 
 class ConfigUpdateRequest(BaseModel):
-    local_developer_folder: str
-    path_type: str = "local"
-    gitlab_url: str = "http://10.19.1.20/Automatization/patchwatch"
-    gitlab_token: str = "glpat-HgBE57H_YinfANkjP6P4"
-    gitlab_project_id: str = "92"
-    git_author_name: str = "Андрей Комаров"
-    git_author_email: str = "prostopil@yandex.ru"
+    local_developer_folder: Optional[str] = None
+    path_type: Optional[str] = None
+    gitlab_url: Optional[str] = None
+    gitlab_token: Optional[str] = None
+    gitlab_project_id: Optional[str] = None
+    git_author_name: Optional[str] = None
+    git_author_email: Optional[str] = None
+    path_mappings: Optional[List[Dict[str, str]]] = None
 
 
 def full_scan_folder(base_path: str, force_resync: bool = False) -> Dict[str, Any]:
@@ -248,7 +254,8 @@ def start_monitoring(config_path: str) -> bool:
                 gitlab_token=config_data.get('gitlab_token', 'glpat-HgBE57H_YinfANkjP6P4'),
                 gitlab_project_id=config_data.get('gitlab_project_id', '92'),
                 git_author_name=config_data.get('git_author_name', 'Андрей Комаров'),
-                git_author_email=config_data.get('git_author_email', 'prostopil@yandex.ru')
+                git_author_email=config_data.get('git_author_email', 'prostopil@yandex.ru'),
+                path_mappings=config_data.get('path_mappings', DEFAULT_PATH_MAPPINGS.copy())
             )
         
         # Create and start monitoring service
@@ -362,7 +369,7 @@ def test_path(path: str) -> Dict[str, Any]:
 def load_config() -> Dict[str, Any]:
     """Load configuration"""
     config_file = Path("working_config.json")
-    
+
     default_config = {
         'local_developer_folder': "C:\\Users\\BLACK\\Desktop\\asterisk-pbx",
         'path_type': 'local',
@@ -370,7 +377,8 @@ def load_config() -> Dict[str, Any]:
         'gitlab_token': 'glpat-HgBE57H_YinfANkjP6P4',
         'gitlab_project_id': '92',
         'git_author_name': 'Андрей Комаров',
-        'git_author_email': 'prostopil@yandex.ru'
+        'git_author_email': 'prostopil@yandex.ru',
+        'path_mappings': DEFAULT_PATH_MAPPINGS.copy()
     }
     
     if config_file.exists():
@@ -409,6 +417,25 @@ app = FastAPI(title="PatchWatch Configuration", version="1.0.0")
 async def main_page():
     """Main configuration page"""
     config = load_config()
+
+    # Prepare existing path mappings for HTML
+    path_mappings_html = ""
+    for mapping in config.get('path_mappings', []):
+        path_mappings_html += (
+            f'<div class="mapping-row">'
+            f'<input type="text" class="mapping-source" value="{mapping["source"]}"> → '
+            f'<input type="text" class="mapping-target" value="{mapping["target"]}"> '
+            f'<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
+            f'</div>'
+        )
+    if not path_mappings_html:
+        path_mappings_html = (
+            '<div class="mapping-row">'
+            '<input type="text" class="mapping-source" placeholder="source path"> → '
+            '<input type="text" class="mapping-target" placeholder="target path"> '
+            '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
+            '</div>'
+        )
     
     html = f'''<!DOCTYPE html>
 <html>
@@ -441,6 +468,9 @@ async def main_page():
         .btn:disabled {{ background: #6c757d; cursor: not-allowed; opacity: 0.6; }}
         .collapsible {{ cursor: pointer; padding: 10px; background-color: #f1f1f1; border: none; outline: none; width: 100%; text-align: left; font-size: 15px; }}
         .content {{ padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #f9f9f9; }}
+        .mapping-row {{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }}
+        .mapping-row input {{ flex: 1; }}
+        .btn-sm {{ padding: 4px 8px; font-size: 12px; }}
     </style>
 </head>
 <body>
@@ -557,9 +587,11 @@ async def main_page():
       
         <div class="info-box">
             <h3>🗂️ Path Mapping</h3>
-            <p><strong>htdocs/</strong> → <code>data/htdocs/</code></p>
-            <p><strong>script/</strong> → <code>data/script/</code></p>
-            <p><strong>home/storage/local/</strong> → <code>data/home/storage/local/</code></p>
+            <div id="pathMappingsContainer">{path_mappings_html}</div>
+            <div class="form-group" style="margin-top:10px;">
+                <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
+                <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
+            </div>
         </div>
     </div>
     
@@ -583,12 +615,49 @@ async def main_page():
         async function showAlert(message, type = 'info') {{
             const alertArea = document.getElementById('alertArea');
             const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
-            
+
             alertArea.innerHTML = `<div class="alert ${{alertClass}}" style="display: block;">${{message}}</div>`;
-            
+
             setTimeout(() => {{
                 alertArea.innerHTML = '';
             }}, 5000);
+        }}
+
+        function addMapping() {{
+            const container = document.getElementById('pathMappingsContainer');
+            const div = document.createElement('div');
+            div.className = 'mapping-row';
+            div.innerHTML = '<input type="text" class="mapping-source" placeholder="source path"> → ' +
+                '<input type="text" class="mapping-target" placeholder="target path"> ' +
+                '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>';
+            container.appendChild(div);
+        }}
+
+        function removeMapping(btn) {{
+            btn.parentElement.remove();
+        }}
+
+        async function savePathMappings() {{
+            const rows = document.querySelectorAll('#pathMappingsContainer .mapping-row');
+            const mappings = [];
+            rows.forEach(row => {{
+                const source = row.querySelector('.mapping-source').value.trim();
+                const target = row.querySelector('.mapping-target').value.trim();
+                if (source && target) {{
+                    mappings.push({{source, target}});
+                }}
+            }});
+
+            try {{
+                await fetch('/save-config', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{ path_mappings: mappings }})
+                }});
+                showAlert('✅ Path mappings saved successfully!', 'success');
+            }} catch (error) {{
+                showAlert(`❌ Error saving path mappings: ${{error.message}}`, 'error');
+            }}
         }}
         
         async function testPath() {{
@@ -933,20 +1002,25 @@ async def save_config_endpoint(request: ConfigUpdateRequest):
         config = load_config()
         
         # Update all fields that are provided
-        config['local_developer_folder'] = request.local_developer_folder
-        config['path_type'] = request.path_type
-        
+        if request.local_developer_folder:
+            config['local_developer_folder'] = request.local_developer_folder
+        if request.path_type:
+            config['path_type'] = request.path_type
+
         # Update GitLab configuration if provided
-        if hasattr(request, 'gitlab_url') and request.gitlab_url:
+        if request.gitlab_url:
             config['gitlab_url'] = request.gitlab_url
-        if hasattr(request, 'gitlab_token') and request.gitlab_token:
+        if request.gitlab_token:
             config['gitlab_token'] = request.gitlab_token
-        if hasattr(request, 'gitlab_project_id') and request.gitlab_project_id:
+        if request.gitlab_project_id:
             config['gitlab_project_id'] = request.gitlab_project_id
-        if hasattr(request, 'git_author_name') and request.git_author_name:
+        if request.git_author_name:
             config['git_author_name'] = request.git_author_name
-        if hasattr(request, 'git_author_email') and request.git_author_email:
+        if request.git_author_email:
             config['git_author_email'] = request.git_author_email
+
+        if request.path_mappings is not None:
+            config['path_mappings'] = request.path_mappings
         
         if save_config(config):
             return JSONResponse({"message": "Configuration saved successfully"})
