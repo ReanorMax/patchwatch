@@ -8,26 +8,20 @@ import json
 import time
 import subprocess
 import threading
-import asyncio
 import requests
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 # Import monitoring service
 try:
-    from monitoring_service import (
-        PatchWatchMonitoringService,
-        MonitoringConfig,
-        load_monitoring_config,
-        DEFAULT_PATH_MAPPINGS,
-    )
+    from monitoring_service import PatchWatchMonitoringService, MonitoringConfig, load_monitoring_config
 except ImportError:
     print("Warning: monitoring_service not available")
     PatchWatchMonitoringService = None
 
 try:
-    from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, HTTPException
     from fastapi.responses import HTMLResponse, JSONResponse
     from pydantic import BaseModel
     import uvicorn
@@ -50,14 +44,13 @@ class FullScanRequest(BaseModel):
 
 
 class ConfigUpdateRequest(BaseModel):
-    local_developer_folder: Optional[str] = None
-    path_type: Optional[str] = None
-    gitlab_url: Optional[str] = None
-    gitlab_token: Optional[str] = None
-    gitlab_project_id: Optional[str] = None
-    git_author_name: Optional[str] = None
-    git_author_email: Optional[str] = None
-    path_mappings: Optional[List[Dict[str, str]]] = None
+    local_developer_folder: str
+    path_type: str = "local"
+    gitlab_url: str = "http://10.19.1.20/Automatization/patchwatch"
+    gitlab_token: str = "glpat-HgBE57H_YinfANkjP6P4"
+    gitlab_project_id: str = "92"
+    git_author_name: str = "Андрей Комаров"
+    git_author_email: str = "prostopil@yandex.ru"
 
 
 def full_scan_folder(base_path: str, force_resync: bool = False) -> Dict[str, Any]:
@@ -255,8 +248,7 @@ def start_monitoring(config_path: str) -> bool:
                 gitlab_token=config_data.get('gitlab_token', 'glpat-HgBE57H_YinfANkjP6P4'),
                 gitlab_project_id=config_data.get('gitlab_project_id', '92'),
                 git_author_name=config_data.get('git_author_name', 'Андрей Комаров'),
-                git_author_email=config_data.get('git_author_email', 'prostopil@yandex.ru'),
-                path_mappings=config_data.get('path_mappings', DEFAULT_PATH_MAPPINGS.copy())
+                git_author_email=config_data.get('git_author_email', 'prostopil@yandex.ru')
             )
         
         # Create and start monitoring service
@@ -370,7 +362,7 @@ def test_path(path: str) -> Dict[str, Any]:
 def load_config() -> Dict[str, Any]:
     """Load configuration"""
     config_file = Path("working_config.json")
-
+    
     default_config = {
         'local_developer_folder': "C:\\Users\\BLACK\\Desktop\\asterisk-pbx",
         'path_type': 'local',
@@ -378,8 +370,7 @@ def load_config() -> Dict[str, Any]:
         'gitlab_token': 'glpat-HgBE57H_YinfANkjP6P4',
         'gitlab_project_id': '92',
         'git_author_name': 'Андрей Комаров',
-        'git_author_email': 'prostopil@yandex.ru',
-        'path_mappings': DEFAULT_PATH_MAPPINGS.copy()
+        'git_author_email': 'prostopil@yandex.ru'
     }
     
     if config_file.exists():
@@ -413,116 +404,11 @@ monitoring_service_instance = None
 # Create FastAPI app
 app = FastAPI(title="PatchWatch Configuration", version="1.0.0")
 
-# WebSocket log streaming state
-log_clients: Set[WebSocket] = set()
-log_loop: Optional[asyncio.AbstractEventLoop] = None
-log_thread_started = False
-
-
-def get_latest_log_file() -> Optional[Path]:
-    """Return the most recent patchwatch log file."""
-    logs_dir = Path(__file__).parent / "logs"
-    log_files = sorted(
-        logs_dir.glob("patchwatch_*.log"),
-        key=lambda x: x.stat().st_mtime,
-        reverse=True,
-    )
-    return log_files[0] if log_files else None
-
-
-def read_recent_logs(max_lines: int = 50) -> List[str]:
-    """Read last lines from the most recent log file."""
-    log_file = get_latest_log_file()
-    if not log_file or not log_file.exists():
-        return ["❌ No log files found"]
-    try:
-        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-            return [line.strip() for line in lines[-max_lines:]]
-    except Exception as e:
-        return [f"❌ Error reading log file: {e}"]
-
-
-async def broadcast_log_line(line: str) -> None:
-    """Send a log line to all connected WebSocket clients."""
-    stale: List[WebSocket] = []
-    for ws in list(log_clients):
-        try:
-            await ws.send_text(line)
-        except Exception:
-            stale.append(ws)
-    for ws in stale:
-        log_clients.discard(ws)
-
-
-def log_watcher() -> None:
-    """Background thread that tails the current log file and broadcasts new lines."""
-    last_file: Optional[Path] = None
-    file_obj = None
-    while True:
-        try:
-            current_file = get_latest_log_file()
-            if current_file is None:
-                time.sleep(1)
-                continue
-            if current_file != last_file:
-                if file_obj:
-                    file_obj.close()
-                file_obj = open(current_file, "r", encoding="utf-8", errors="ignore")
-                file_obj.seek(0, 2)  # Move to end of file
-                last_file = current_file
-
-            line = file_obj.readline()
-            if not line:
-                time.sleep(1)
-                continue
-            if log_loop:
-                asyncio.run_coroutine_threadsafe(
-                    broadcast_log_line(line.rstrip()), log_loop
-                )
-        except Exception:
-            time.sleep(1)
-
-
-@app.on_event("startup")
-async def start_log_thread() -> None:
-    """Initialize background log watcher thread."""
-    global log_loop, log_thread_started
-    if not log_thread_started:
-        log_loop = asyncio.get_running_loop()
-        threading.Thread(target=log_watcher, daemon=True).start()
-        log_thread_started = True
-
 
 @app.get("/", response_class=HTMLResponse)
 async def main_page():
     """Main configuration page"""
     config = load_config()
-
-    # Prepare existing path mappings for HTML with labels
-    path_mappings_html = ""
-    for mapping in config.get('path_mappings', []):
-        path_mappings_html += (
-            f'<div class="mapping-row">'
-            f'<span class="mapping-label">Local</span>'
-            f'<input type="text" class="mapping-source" value="{mapping["source"]}" placeholder="local path">'
-            f'<span class="mapping-arrow">→</span>'
-            f'<span class="mapping-label">Git</span>'
-            f'<input type="text" class="mapping-target" value="{mapping["target"]}" placeholder="git path"> '
-            f'<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
-            f'</div>'
-        )
-    if not path_mappings_html:
-        path_mappings_html = (
-            '<div class="mapping-row">'
-            '<span class="mapping-label">Local</span>'
-            '<input type="text" class="mapping-source" placeholder="local path">'
-            '<span class="mapping-arrow">→</span>'
-            '<span class="mapping-label">Git</span>'
-            '<input type="text" class="mapping-target" placeholder="git path"> '
-            '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>'
-            '</div>'
-        )
     
     html = f'''<!DOCTYPE html>
 <html>
@@ -532,6 +418,7 @@ async def main_page():
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
         .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }}
         .form-group {{ margin-bottom: 20px; }}
         label {{ display: block; margin-bottom: 5px; font-weight: bold; color: #333; }}
         input, select {{ width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; }}
@@ -554,159 +441,129 @@ async def main_page():
         .btn:disabled {{ background: #6c757d; cursor: not-allowed; opacity: 0.6; }}
         .collapsible {{ cursor: pointer; padding: 10px; background-color: #f1f1f1; border: none; outline: none; width: 100%; text-align: left; font-size: 15px; }}
         .content {{ padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #f9f9f9; }}
-        .mapping-row {{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }}
-        .mapping-row input {{ flex: 1; }}
-        .mapping-label {{ font-weight: bold; font-size: 12px; }}
-        .mapping-arrow {{ font-weight: bold; }}
-        .btn-sm {{ padding: 4px 8px; font-size: 12px; }}
-        .tab-buttons {{ display: flex; margin-bottom: 20px; }}
-        .tab-btn {{ flex: 1; padding: 10px; cursor: pointer; border: none; background: #6c757d; color: white; }}
-        .tab-btn.active {{ background: #667eea; }}
-        .tab-content {{ display: none; }}
-        .tab-content.active {{ display: block; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="tab-buttons">
-            <button class="tab-btn active" onclick="showTab('monitorTab', this)">🖥️ Monitor</button>
-            <button class="tab-btn" onclick="showTab('settingsTab', this)">⚙️ Settings</button>
+        <div class="header">
+            <h1>🎯 PatchWatch Configuration</h1>
+            <p>Configure local developer folder for GitLab synchronization</p>
         </div>
-
+        
+        <div class="info-box">
+            <h3>📋 System Information</h3>
+            <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
+            <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
+            <p><strong>Current Local Folder:</strong> <span id="currentFolder">{config['local_developer_folder']}</span></p>
+        </div>
+        
+        <div id="statusArea"></div>
         <div id="alertArea"></div>
-
-        <div id="monitorTab" class="tab-content active">
-            <div class="monitoring-controls">
-                <h3>🔄 Monitoring Controls</h3>
-                <p>Start or stop monitoring the configured local developer folder:</p>
-                <div id="monitoringStatus" class="status">Status: <span id="monitoringStatusText">Loading...</span></div>
-                <div id="monitoringStats" class="info-box" style="display: none;">
-                    <p><strong>📊 Processed Files:</strong> <span id="processedCount">0</span></p>
-                    <p><strong>📁 Monitored Folder:</strong> <span id="monitoredFolder">-</span></p>
-                </div>
+        
+        <div class="form-group">
+            <label for="localPath">Local Developer Folder Path:</label>
+            <input type="text" id="localPath" value="{config['local_developer_folder']}" 
+                   placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
+            <small>Path where developers drop new files (can be local or network path)</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="pathType">Path Type:</label>
+            <select id="pathType">
+                <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
+                <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
+                <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
+            <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
+            <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
+        </div>
+        
+        <button type="button" class="collapsible">🌐 GitLab Repository Configuration</button>
+        <div class="content">
+            <div class="info-box">
+                <p>Configure the target GitLab repository for synchronization:</p>
+                
                 <div class="form-group">
-                    <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ Start Monitoring</button>
-                    <button id="stopBtn" class="btn btn-secondary" onclick="stopMonitoring()">⏹️ Stop Monitoring</button>
-                    <button class="btn btn-success" onclick="fullScan()">🔍 Сканировать папку</button>
-                    <button class="btn btn-secondary" onclick="showLogs()">📄 View Logs</button>
+                    <label for="gitlabUrl">GitLab Repository URL:</label>
+                    <input type="text" id="gitlabUrl" value="{config['gitlab_url']}" 
+                           placeholder="http://your-gitlab.com/group/project">
+                    <small>GitLab repository URL (without /-/tree/main/data suffix)</small>
                 </div>
-                <small><strong>Note:</strong> Monitoring will watch for changes in the local folder and sync them to GitLab automatically.</small>
-            </div>
-
-            <div id="logsSection" class="info-box" style="display: none;">
-                <h3>📄 Recent Logs</h3>
-                <div id="logsContent" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">
-                    Loading logs...
+                
+                <div class="form-group">
+                    <label for="gitlabToken">GitLab Access Token:</label>
+                    <input type="password" id="gitlabToken" value="{config['gitlab_token']}" 
+                           placeholder="glpat-xxxxxxxxxxxxx">
+                    <small>Personal Access Token with Maintainer permissions (glpat-*)</small>
                 </div>
-                <div style="margin-top: 10px;">
-                    <button class="btn btn-secondary" onclick="hideLogs()">❌ Hide Logs</button>
+                
+                <div class="form-group">
+                    <label for="gitlabProjectId">GitLab Project ID:</label>
+                    <input type="text" id="gitlabProjectId" value="{config['gitlab_project_id']}" 
+                           placeholder="92">
+                    <small>Numeric project ID from GitLab</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gitAuthorName">Git Author Name:</label>
+                    <input type="text" id="gitAuthorName" value="{config['git_author_name']}" 
+                           placeholder="Андрей Комаров">
+                </div>
+                
+                <div class="form-group">
+                    <label for="gitAuthorEmail">Git Author Email:</label>
+                    <input type="email" id="gitAuthorEmail" value="{config['git_author_email']}" 
+                           placeholder="prostopil@yandex.ru">
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn btn-success" onclick="saveGitLabConfig()">💾 Save GitLab Config</button>
+                    <button class="btn btn-secondary" onclick="testGitLabConnection()">🔗 Test Connection</button>
                 </div>
             </div>
         </div>
-
-        <div id="settingsTab" class="tab-content">
-            <div class="info-box" id="systemInfo">
-                <div style="display:flex; align-items:center;">
-                    <h3 style="margin:0;">📋 System Information</h3>
-                </div>
-                <p><strong>GitLab Source of Truth:</strong> <a href="{config['gitlab_url']}/-/tree/main/data" target="_blank">{config['gitlab_url']}/-/tree/main/data</a></p>
-                <p><strong>Git Author:</strong> {config['git_author_name']} &lt;{config['git_author_email']}&gt;</p>
-                <p><strong>Current Local Folder:</strong> <span id="currentFolder">{config['local_developer_folder']}</span></p>
+        
+        <div class="monitoring-controls">
+            <h3>🔄 Monitoring Controls</h3>
+            <p>Start or stop monitoring the configured local developer folder:</p>
+            <div id="monitoringStatus" class="status">Status: <span id="monitoringStatusText">Loading...</span></div>
+            <div id="monitoringStats" class="info-box" style="display: none;">
+                <p><strong>📊 Processed Files:</strong> <span id="processedCount">0</span></p>
+                <p><strong>📁 Monitored Folder:</strong> <span id="monitoredFolder">-</span></p>
             </div>
-
-            <button type="button" class="collapsible">📁 Local Developer Folder Path</button>
-            <div class="content">
-                <div class="info-box">
-                    <div class="form-group">
-                        <label for="localPath">Local Developer Folder Path:</label>
-                        <input type="text" id="localPath" value="{config['local_developer_folder']}"
-                               placeholder="C:\\path\\to\\folder or \\\\server\\share\\folder">
-                        <small>Path where developers drop new files (can be local or network path)</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="pathType">Path Type:</label>
-                        <select id="pathType">
-                            <option value="local" {"selected" if config['path_type'] == 'local' else ""}>Local Path</option>
-                            <option value="unc" {"selected" if config['path_type'] == 'unc' else ""}>UNC Network Path</option>
-                            <option value="smb" {"selected" if config['path_type'] == 'smb' else ""}>SMB Share</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <button class="btn btn-secondary" onclick="testPath()">🔍 Test Path</button>
-                    <button class="btn btn-primary" onclick="saveConfig()">💾 Save Configuration</button>
-                    <button class="btn btn-secondary" onclick="loadStatus()">🔄 Refresh Status</button>
-                </div>
+            <div class="form-group">
+                <button id="startBtn" class="btn btn-primary" onclick="startMonitoring()">▶️ Start Monitoring</button>
+                <button id="stopBtn" class="btn btn-secondary" onclick="stopMonitoring()">⏹️ Stop Monitoring</button>
+                <button class="btn btn-success" onclick="fullScan()">🔍 Сканировать папку</button>
+                <button class="btn btn-secondary" onclick="showLogs()">📄 View Logs</button>
             </div>
-
-            <button type="button" class="collapsible">🌐 GitLab Repository Configuration</button>
-            <div class="content">
-                <div class="info-box">
-                    <p>Configure the target GitLab repository for synchronization:</p>
-
-                    <div class="form-group">
-                        <label for="gitlabUrl">GitLab Repository URL:</label>
-                        <input type="text" id="gitlabUrl" value="{config['gitlab_url']}"
-                               placeholder="http://your-gitlab.com/group/project">
-                        <small>GitLab repository URL (without /-/tree/main/data suffix)</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="gitlabToken">GitLab Access Token:</label>
-                        <input type="password" id="gitlabToken" value="{config['gitlab_token']}"
-                               placeholder="glpat-xxxxxxxxxxxxx">
-                        <small>Personal Access Token with Maintainer permissions (glpat-*)</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="gitlabProjectId">GitLab Project ID:</label>
-                        <input type="text" id="gitlabProjectId" value="{config['gitlab_project_id']}"
-                               placeholder="92">
-                        <small>Numeric project ID from GitLab</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="gitAuthorName">Git Author Name:</label>
-                        <input type="text" id="gitAuthorName" value="{config['git_author_name']}"
-                               placeholder="Андрей Комаров">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="gitAuthorEmail">Git Author Email:</label>
-                        <input type="email" id="gitAuthorEmail" value="{config['git_author_email']}"
-                               placeholder="prostopil@yandex.ru">
-                    </div>
-
-                    <div class="form-group">
-                        <button class="btn btn-success" onclick="saveGitLabConfig()">💾 Save GitLab Config</button>
-                        <button class="btn btn-secondary" onclick="testGitLabConnection()">🔗 Test Connection</button>
-                    </div>
-                </div>
+            <small><strong>Note:</strong> Monitoring will watch for changes in the local folder and sync them to GitLab automatically.</small>
+        </div>
+        
+        <div id="logsSection" class="info-box" style="display: none;">
+            <h3>📄 Recent Logs</h3>
+            <div id="logsContent" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">
+                Loading logs...
             </div>
-
-            <button type="button" class="collapsible">🗂️ Path Mapping</button>
-            <div class="content">
-                <div class="info-box">
-                    <div id="pathMappingsContainer">{path_mappings_html}</div>
-                    <div class="form-group" style="margin-top:10px;">
-                        <button class="btn btn-secondary" onclick="addMapping()">➕ Add Mapping</button>
-                        <button class="btn btn-primary" onclick="savePathMappings()">💾 Save Mappings</button>
-                    </div>
-                </div>
+            <div style="margin-top: 10px;">
+                <button class="btn btn-secondary" onclick="refreshLogs()">🔄 Refresh Logs</button>
+                <button class="btn btn-secondary" onclick="hideLogs()">❌ Hide Logs</button>
             </div>
+        </div>
+      
+        <div class="info-box">
+            <h3>🗂️ Path Mapping</h3>
+            <p><strong>htdocs/</strong> → <code>data/htdocs/</code></p>
+            <p><strong>script/</strong> → <code>data/script/</code></p>
+            <p><strong>home/storage/local/</strong> → <code>data/home/storage/local/</code></p>
         </div>
     </div>
     
     <script>
-        let logsSocket = null;
-
-        function showTab(tabId, btn) {{
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }}
-
         // Collapsible functionality for GitLab configuration
         document.addEventListener('DOMContentLoaded', function() {{
             var coll = document.getElementsByClassName("collapsible");
@@ -726,58 +583,12 @@ async def main_page():
         async function showAlert(message, type = 'info') {{
             const alertArea = document.getElementById('alertArea');
             const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
-
+            
             alertArea.innerHTML = `<div class="alert ${{alertClass}}" style="display: block;">${{message}}</div>`;
-
+            
             setTimeout(() => {{
                 alertArea.innerHTML = '';
             }}, 5000);
-        }}
-
-        function addMapping() {{
-            const container = document.getElementById('pathMappingsContainer');
-            const div = document.createElement('div');
-            div.className = 'mapping-row';
-            div.innerHTML = '<span class="mapping-label">Local</span>' +
-                '<input type="text" class="mapping-source" placeholder="local path">' +
-                '<span class="mapping-arrow">→</span>' +
-                '<span class="mapping-label">Git</span>' +
-                '<input type="text" class="mapping-target" placeholder="git path"> ' +
-                '<button class="btn btn-secondary btn-sm" onclick="removeMapping(this)">❌</button>';
-            container.appendChild(div);
-        }}
-
-        function removeMapping(btn) {{
-            btn.parentElement.remove();
-        }}
-
-        async function savePathMappings() {{
-            const rows = document.querySelectorAll('#pathMappingsContainer .mapping-row');
-            const mappings = [];
-            rows.forEach(row => {{
-                const source = row.querySelector('.mapping-source').value.trim();
-                const target = row.querySelector('.mapping-target').value.trim();
-                if (source && target) {{
-                    mappings.push({{source, target}});
-                }}
-            }});
-
-            try {{
-                const response = await fetch('/save-config', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{ path_mappings: mappings }})
-                }});
-                const result = await response.json();
-                if (response.ok) {{
-                    const applied = mappings.map(m => `${{m.source}} → ${{m.target}}`).join('<br>');
-                    showAlert(`✅ Path mappings saved:<br>${{applied}}`, 'success');
-                }} else {{
-                    showAlert(`❌ Error saving path mappings: ${{result.detail || result.message}}`, 'error');
-                }}
-            }} catch (error) {{
-                showAlert(`❌ Error saving path mappings: ${{error.message}}`, 'error');
-            }}
         }}
         
         async function testPath() {{
@@ -968,6 +779,10 @@ async def main_page():
                     
                     showAlert(message, 'success');
                     
+                    // Обновляем логи чтобы показать результаты сканирования
+                    if (document.getElementById('logsSection').style.display !== 'none') {{
+                        refreshLogs();
+                    }}
                 }} else {{
                     showAlert(`❌ Ошибка сканирования: ${{result.error}}`, 'error');
                 }}
@@ -1008,37 +823,33 @@ async def main_page():
             }}
         }}
         
-        function showLogs() {{
+        async function showLogs() {{
             const logsSection = document.getElementById('logsSection');
             logsSection.style.display = 'block';
-            connectLogsSocket();
+            await refreshLogs();
         }}
-
+        
         function hideLogs() {{
             document.getElementById('logsSection').style.display = 'none';
-            if (logsSocket) {{
-                logsSocket.close();
-                logsSocket = null;
-            }}
         }}
-
-        function connectLogsSocket() {{
-            if (logsSocket) {{
-                logsSocket.close();
-            }}
-            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            logsSocket = new WebSocket(`${{protocol}}://${{window.location.host}}/ws/logs`);
-            const logsContent = document.getElementById('logsContent');
-            logsContent.innerHTML = '';
-            logsSocket.onmessage = (event) => {{
-                const div = document.createElement('div');
-                div.textContent = event.data;
-                logsContent.appendChild(div);
+        
+        async function refreshLogs() {{
+            try {{
+                const response = await fetch('/logs');
+                const data = await response.json();
+                
+                const logsContent = document.getElementById('logsContent');
+                if (data.logs && data.logs.length > 0) {{
+                    logsContent.innerHTML = data.logs.map(log => `<div>${{log}}</div>`).join('');
+                }} else {{
+                    logsContent.innerHTML = 'No logs available or logs file not found.';
+                }}
+                
+                // Auto-scroll to bottom
                 logsContent.scrollTop = logsContent.scrollHeight;
-            }};
-            logsSocket.onclose = () => {{
-                logsSocket = null;
-            }};
+            }} catch (error) {{
+                document.getElementById('logsContent').innerHTML = `Error loading logs: ${{error.message}}`;
+            }}
         }}
         
         // Load status on page load
@@ -1080,14 +891,7 @@ async def test_gitlab_connection(request: dict):
         response = requests.get(api_url, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            try:
-                user_info = response.json()
-            except ValueError:
-                return JSONResponse({
-                    "success": False,
-                    "error": "Invalid JSON response from GitLab",
-                    "details": response.text[:100]
-                })
+            user_info = response.json()
             return JSONResponse({
                 "success": True,
                 "user_name": user_info.get('name', 'Unknown'),
@@ -1129,25 +933,20 @@ async def save_config_endpoint(request: ConfigUpdateRequest):
         config = load_config()
         
         # Update all fields that are provided
-        if request.local_developer_folder:
-            config['local_developer_folder'] = request.local_developer_folder
-        if request.path_type:
-            config['path_type'] = request.path_type
-
+        config['local_developer_folder'] = request.local_developer_folder
+        config['path_type'] = request.path_type
+        
         # Update GitLab configuration if provided
-        if request.gitlab_url:
+        if hasattr(request, 'gitlab_url') and request.gitlab_url:
             config['gitlab_url'] = request.gitlab_url
-        if request.gitlab_token:
+        if hasattr(request, 'gitlab_token') and request.gitlab_token:
             config['gitlab_token'] = request.gitlab_token
-        if request.gitlab_project_id:
+        if hasattr(request, 'gitlab_project_id') and request.gitlab_project_id:
             config['gitlab_project_id'] = request.gitlab_project_id
-        if request.git_author_name:
+        if hasattr(request, 'git_author_name') and request.git_author_name:
             config['git_author_name'] = request.git_author_name
-        if request.git_author_email:
+        if hasattr(request, 'git_author_email') and request.git_author_email:
             config['git_author_email'] = request.git_author_email
-
-        if request.path_mappings is not None:
-            config['path_mappings'] = request.path_mappings
         
         if save_config(config):
             return JSONResponse({"message": "Configuration saved successfully"})
@@ -1218,23 +1017,6 @@ async def get_monitoring_status_endpoint():
     """Get monitoring status"""
     status = get_monitoring_status()
     return JSONResponse(status)
-
-
-@app.websocket("/ws/logs")
-async def websocket_logs(websocket: WebSocket) -> None:
-    """WebSocket endpoint streaming log updates to clients."""
-    await websocket.accept()
-    log_clients.add(websocket)
-
-    # Send recent log lines on connection
-    for line in read_recent_logs():
-        await websocket.send_text(line)
-
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        log_clients.discard(websocket)
 
 
 @app.get("/logs")
@@ -1379,11 +1161,11 @@ async def get_status():
 def main():
     """Start the web interface"""
     print("🚀 Starting PatchWatch Web Interface...")
-    print("🌐 Access the web interface at: http://localhost:8086")
+    print("🌐 Access the web interface at: http://localhost:8085")
     print("💡 Press Ctrl+C to stop the server")
     
     try:
-        uvicorn.run("web_interface:app", host="0.0.0.0", port=8086, reload=False)
+        uvicorn.run("web_interface:app", host="0.0.0.0", port=8085, reload=False)
     except KeyboardInterrupt:
         print("\\n🛑 Stopping web interface...")
     except Exception as e:
