@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 try:
     from watchdog.observers import Observer
@@ -25,14 +25,6 @@ except ImportError as e:
     print("Please install: pip install watchdog requests")
     sys.exit(1)
 
-
-DEFAULT_PATH_MAPPINGS = [
-    {"source": "usr/local/httpd/htdocs", "target": "htdocs"},
-    {"source": "usr/local/asterisk/etc/asterisk/script", "target": "script"},
-    {"source": "home/storage/local", "target": "home/storage/local"},
-    {"source": "htdocs", "target": "htdocs"},
-    {"source": "script", "target": "script"},
-]
 
 @dataclass
 class MonitoringConfig:
@@ -47,7 +39,6 @@ class MonitoringConfig:
     auto_confirm: bool = True
     auto_sync: bool = True
     auto_delete: bool = True
-    path_mappings: List[Dict[str, str]] = field(default_factory=lambda: DEFAULT_PATH_MAPPINGS.copy())
 
 
 class FileChangeHandler(FileSystemEventHandler):
@@ -326,18 +317,29 @@ class PatchWatchMonitoringService:
         """Apply path mappings according to project specifications"""
         if not source_path:
             return ""
-
-        mappings = self.config.path_mappings or []
-        # Longer matches take precedence
-        sorted_mappings = sorted(mappings, key=lambda m: len(m.get('source', '')), reverse=True)
-
-        for mapping in sorted_mappings:
-            source_pattern = mapping.get('source', '')
-            target_pattern = mapping.get('target', '')
+        
+        # Path mappings (longer matches take precedence)
+        mappings = [
+            # Full path mappings (check these first for precedence)
+            ("usr/local/httpd/htdocs", "htdocs"),
+            ("usr/local/asterisk/etc/asterisk/script", "script"),
+            ("home/storage/local", "home/storage/local"),
+            
+            # Shorter path mappings
+            ("htdocs", "htdocs"),
+            ("script", "script"),
+        ]
+        
+        # Check mappings in order (longer first for precedence)
+        for source_pattern, target_pattern in mappings:
             if source_path.startswith(source_pattern):
+                # Replace the matching part
                 remaining_path = source_path[len(source_pattern):].lstrip('/')
-                return f"{target_pattern}/{remaining_path}" if remaining_path else target_pattern
-
+                if remaining_path:
+                    return f"{target_pattern}/{remaining_path}"
+                else:
+                    return target_pattern
+        
         # If no mapping found, return as-is under data/
         return source_path
     
@@ -421,11 +423,7 @@ class PatchWatchMonitoringService:
             response = requests.get(api_url, headers=headers)
             
             if response.status_code == 200:
-                try:
-                    user_info = response.json()
-                except json.JSONDecodeError:
-                    self.logger.error(f"❌ Неверный ответ от GitLab при проверке токена: {response.text[:100]}")
-                    return False
+                user_info = response.json()
                 self.logger.info(f"👤 Пользователь: {user_info.get('name')} ({user_info.get('username')})")
                 self.logger.info(f"🔑 Уровень доступа: {user_info.get('access_level', 'Unknown')}")
                 return True
@@ -448,11 +446,7 @@ class PatchWatchMonitoringService:
             response = requests.get(api_url, headers=headers, params=params)
             
             if response.status_code == 200:
-                try:
-                    projects = response.json()
-                except json.JSONDecodeError:
-                    self.logger.error(f"❌ Неверный JSON от GitLab при поиске проектов: {response.text[:100]}")
-                    return None
+                projects = response.json()
                 self.logger.info(f"🔍 Найдено проектов: {len(projects)}")
                 
                 for project in projects:
@@ -513,11 +507,7 @@ class PatchWatchMonitoringService:
             project_response = requests.get(project_api_url, headers=headers)
             
             if project_response.status_code == 200:
-                try:
-                    project_info = project_response.json()
-                except json.JSONDecodeError:
-                    self.logger.error(f"❌ Неверный JSON при получении данных проекта: {project_response.text[:100]}")
-                    return False
+                project_info = project_response.json()
                 permissions = project_info.get('permissions', {})
                 project_access = permissions.get('project_access') or {}
                 group_access = permissions.get('group_access') or {}
@@ -797,8 +787,7 @@ def load_monitoring_config() -> MonitoringConfig:
                     git_author_email=data.get('git_author_email', 'prostopil@yandex.ru'),
                     auto_confirm=data.get('auto_confirm', True),
                     auto_sync=data.get('auto_sync', True),
-                    auto_delete=data.get('auto_delete', True),
-                    path_mappings=data.get('path_mappings', DEFAULT_PATH_MAPPINGS.copy())
+                    auto_delete=data.get('auto_delete', True)
                 )
         except Exception as e:
             print(f"Warning: Could not load config: {e}")
@@ -808,8 +797,7 @@ def load_monitoring_config() -> MonitoringConfig:
         local_developer_folder=str(Path.cwd() / 'test_asterisk_pbx'),
         auto_confirm=True,
         auto_sync=True,
-        auto_delete=True,
-        path_mappings=DEFAULT_PATH_MAPPINGS.copy()
+        auto_delete=True
     )
 
 
